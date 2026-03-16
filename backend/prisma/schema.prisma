@@ -1,0 +1,230 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum UserRole {
+  ADMIN
+  LIBRARIAN
+  MEMBER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+enum LoanStatus {
+  ACTIVE
+  RETURNED
+  OVERDUE
+  LOST
+}
+
+enum HoldStatus {
+  ACTIVE
+  FULFILLED
+  CANCELLED
+  EXPIRED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  CHECKOUT
+  RETURN
+  HOLD
+  CANCEL_HOLD
+  RATE
+  WISHLIST_ADD
+  WISHLIST_REMOVE
+  CONFIG_SET
+}
+
+enum BookCategory {
+  TECH
+  FICTION
+  SCIENCE
+  HISTORY
+  MANAGEMENT
+}
+
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String?
+  name         String?
+  role         UserRole    @default(MEMBER)
+  status       UserStatus  @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastLogin DateTime?
+
+  loans     Loan[]
+  ratings   Rating[]
+  holds     Hold[]
+  wishlist  Wishlist[]
+  auditLogs AuditLog[]
+
+  @@index([role])
+  @@index([status])
+}
+
+model Book {
+  id          String   @id @default(cuid())
+  isbn        String?  @unique
+  title       String
+  subtitle    String?
+  description String?
+
+  category BookCategory
+
+  authors   String
+  publisher String?
+  language  String?  // e.g. "en", "zh"
+  year      Int?
+
+  coverImageUrl String?
+
+  copiesTotal     Int @default(1)
+  copiesAvailable Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  loans     Loan[]
+  ratings   Rating[]
+  holds     Hold[]
+  wishlists Wishlist[]
+
+  @@index([title])
+  @@index([authors])
+  @@index([category])
+}
+
+model Loan {
+  id String @id @default(cuid())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Restrict)
+  bookId String
+
+  status     LoanStatus @default(ACTIVE)
+  checkedOutAt DateTime @default(now())
+  dueAt       DateTime
+  returnedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([bookId, status])
+  @@index([dueAt])
+}
+
+model Rating {
+  id String @id @default(cuid())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  bookId String
+
+  score   Int
+  comment String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, bookId])
+  @@index([bookId])
+  @@index([score])
+}
+
+model Hold {
+  id String @id @default(cuid())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  bookId String
+
+  status HoldStatus @default(ACTIVE)
+  placedAt DateTime @default(now())
+  expiresAt DateTime?
+  fulfilledAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([bookId, status])
+  @@index([placedAt])
+}
+
+model Wishlist {
+  id String @id @default(cuid())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  bookId String
+
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, bookId])
+  @@index([userId])
+  @@index([bookId])
+}
+
+model Config {
+  id String @id @default(cuid())
+
+  key   String @unique
+  value String
+
+  description String?
+
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  action AuditAction
+  entity String?
+  entityId String?
+
+  // Who did it (optional for system actions)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId String?
+
+  message String?
+  ip      String?
+  userAgent String?
+
+  // Store extra context (JSON as string for SQLite compatibility)
+  metadata String?
+
+  createdAt DateTime @default(now())
+
+  @@index([action])
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
